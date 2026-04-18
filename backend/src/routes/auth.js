@@ -20,8 +20,10 @@ export async function authRoutes(app) {
 
   // POST /api/auth/register
   app.post('/register', async (request, reply) => {
+    console.log('REGISTER BODY:', JSON.stringify(request.body))
     const result = registerSchema.safeParse(request.body)
     if (!result.success) {
+      console.log('REGISTER VALIDATION ERRORS:', JSON.stringify(result.error.flatten()))
       return reply.code(400).send({ error: 'Invalid input', details: result.error.flatten() })
     }
 
