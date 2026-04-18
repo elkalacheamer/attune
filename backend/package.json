@@ -2,6 +2,7 @@
   "name": "attune-backend",
   "version": "0.1.0",
   "description": "Attune REST API + WebSocket server",
+  "type": "module",
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",

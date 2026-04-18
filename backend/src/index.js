@@ -71,7 +71,9 @@ app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOStrin
 // ── Start ─────────────────────────────────────────────────
 const start = async () => {
   try {
-    await db.connect()
+    // Test DB connection then release immediately
+    const client = await db.connect()
+    client.release()
     app.log.info('Database connected')
 
     await app.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' })
