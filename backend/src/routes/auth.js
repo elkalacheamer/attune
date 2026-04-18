@@ -29,42 +29,49 @@ export async function authRoutes(app) {
 
     const { email, password, name, sex, date_of_birth } = result.data
 
-    const existing = await db.query('SELECT id FROM users WHERE email = $1', [email])
-    if (existing.rows.length > 0) {
-      return reply.code(409).send({ error: 'Email already registered' })
+    try {
+      const existing = await db.query('SELECT id FROM users WHERE email = $1', [email])
+      if (existing.rows.length > 0) {
+        return reply.code(409).send({ error: 'Email already registered' })
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12)
+      const userId = uuidv4()
+      const inviteCode = Math.random().toString(36).substring(2, 7).toUpperCase()
+
+      console.log('REGISTER: inserting user', userId)
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, name, sex, date_of_birth)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, email, passwordHash, name, sex, date_of_birth || null]
+      )
+
+      console.log('REGISTER: inserting privacy_settings')
+      await db.query(
+        `INSERT INTO privacy_settings (user_id) VALUES ($1)`,
+        [userId]
+      )
+
+      console.log('REGISTER: inserting couple')
+      const coupleId = uuidv4()
+      const coupleColumn = sex === 'female' ? 'female_user_id' : 'male_user_id'
+      await db.query(
+        `INSERT INTO couples (id, ${coupleColumn}, invite_code) VALUES ($1, $2, $3)`,
+        [coupleId, userId, inviteCode]
+      )
+
+      console.log('REGISTER: success', userId)
+      const token = app.jwt.sign({ userId, email, sex, coupleId }, { expiresIn: '30d' })
+
+      return reply.code(201).send({
+        token,
+        user: { id: userId, email, name, sex },
+        couple: { id: coupleId, inviteCode }
+      })
+    } catch (err) {
+      console.error('REGISTER DB ERROR:', err.message, err.code)
+      return reply.code(500).send({ error: 'Registration failed', detail: err.message })
     }
-
-    const passwordHash = await bcrypt.hash(password, 12)
-    const userId = uuidv4()
-    const inviteCode = Math.random().toString(36).substring(2, 7).toUpperCase()
-
-    await db.query(
-      `INSERT INTO users (id, email, password_hash, name, sex, date_of_birth)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [userId, email, passwordHash, name, sex, date_of_birth || null]
-    )
-
-    // Create default privacy settings
-    await db.query(
-      `INSERT INTO privacy_settings (user_id) VALUES ($1)`,
-      [userId]
-    )
-
-    // Create a couple record with invite code (partner will join later)
-    const coupleId = uuidv4()
-    const coupleColumn = sex === 'female' ? 'female_user_id' : 'male_user_id'
-    await db.query(
-      `INSERT INTO couples (id, ${coupleColumn}, invite_code) VALUES ($1, $2, $3)`,
-      [coupleId, userId, inviteCode]
-    )
-
-    const token = app.jwt.sign({ userId, email, sex, coupleId }, { expiresIn: '30d' })
-
-    return reply.code(201).send({
-      token,
-      user: { id: userId, email, name, sex },
-      couple: { id: coupleId, inviteCode }
-    })
   })
 
   // POST /api/auth/login
