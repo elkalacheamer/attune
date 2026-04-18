@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attune Logo Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f0f0f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px 20px; }
+  h1 { text-align: center; color: #333; margin-bottom: 8px; font-weight: 600; }
+  p.sub { text-align: center; color: #888; margin-bottom: 40px; font-size: 14px; }
+
+  .row { display: flex; justify-content: center; align-items: flex-start; gap: 48px; flex-wrap: wrap; }
+
+  .card { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .label { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+
+  /* App icon — iOS rounded square */
+  .icon-wrap {
+    width: 180px; height: 180px;
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(127,119,221,0.35), 0 2px 8px rgba(0,0,0,0.12);
+    background: #7F77DD;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Phone mockup for splash */
+  .phone {
+    width: 200px; height: 400px;
+    background: #111;
+    border-radius: 36px;
+    padding: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    position: relative;
+  }
+  .phone-screen {
+    width: 100%; height: 100%;
+    border-radius: 28px;
+    background: #7F77DD;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0;
+  }
+  .phone-notch {
+    position: absolute; top: 17px; left: 50%;
+    transform: translateX(-50%);
+    width: 60px; height: 6px;
+    background: #111;
+    border-radius: 3px;
+    z-index: 10;
+  }
+
+  /* SVG icon — shared between icon and splash */
+  svg.attune { display: block; }
+
+  /* Text in splash */
+  .splash-name {
+    font-size: 28px; font-weight: 700;
+    color: #fff; letter-spacing: -0.5px;
+    margin-top: 14px;
+  }
+  .splash-tag {
+    font-size: 11px; color: #EEEDFE;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+  }
+
+  /* Home screen mockup */
+  .homescreen {
+    width: 200px; height: 400px;
+    background: linear-gradient(160deg, #4a4a8a 0%, #6b6bb0 100%);
+    border-radius: 36px;
+    padding: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    position: relative;
+    overflow: hidden;
+  }
+  .hs-inner {
+    width: 100%; height: 100%;
+    border-radius: 28px;
+    overflow: hidden;
+    position: relative;
+  }
+  .hs-wallpaper {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg, #3a3a7a 0%, #5a5aa0 100%);
+  }
+  .hs-status {
+    position: relative; z-index: 1;
+    display: flex; justify-content: space-between;
+    padding: 10px 14px 0;
+    font-size: 9px; color: rgba(255,255,255,0.85);
+  }
+  .hs-apps {
+    position: absolute; bottom: 28px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .hs-app-icon {
+    width: 56px; height: 56px;
+    border-radius: 13px;
+    background: #7F77DD;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+  }
+  .hs-app-name {
+    font-size: 9px; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+</style>
+</head>
+<body>
+
+<h1>Attune — Logo Preview</h1>
+<p class="sub">How the icon will look on your iPhone</p>
+
+<div class="row">
+
+  <!-- App Icon -->
+  <div class="card">
+    <div class="label">App Icon</div>
+    <div class="icon-wrap">
+      <svg class="attune" width="140" height="140" viewBox="0 0 140 140">
+        <circle cx="70" cy="70" r="62" fill="#EEEDFE"/>
+        <circle cx="70" cy="70" r="38" fill="#AFA9EC"/>
+        <circle cx="70" cy="70" r="23" fill="#7F77DD"/>
+        <circle cx="70" cy="32" r="3.5" fill="#7F77DD"/>
+        <circle cx="70" cy="108" r="3.5" fill="#7F77DD"/>
+        <circle cx="32" cy="70" r="3.5" fill="#7F77DD"/>
+        <circle cx="108" cy="70" r="3.5" fill="#7F77DD"/>
+        <line x1="70" y1="70" x2="84" y2="56" stroke="#EEEDFE" stroke-width="3" stroke-linecap="round"/>
+        <line x1="70" y1="70" x2="70" y2="85" stroke="#EEEDFE" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span style="font-size:12px;color:#999;">1024 × 1024 px</span>
+  </div>
+
+  <!-- Splash screen in phone -->
+  <div class="card">
+    <div class="label">Splash Screen</div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <svg class="attune" width="90" height="90" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="62" fill="#EEEDFE" opacity="0.9"/>
+          <circle cx="70" cy="70" r="38" fill="#AFA9EC"/>
+          <circle cx="70" cy="70" r="23" fill="#7F77DD"/>
+          <circle cx="70" cy="32" r="3.5" fill="#7F77DD"/>
+          <circle cx="70" cy="108" r="3.5" fill="#7F77DD"/>
+          <circle cx="32" cy="70" r="3.5" fill="#7F77DD"/>
+          <circle cx="108" cy="70" r="3.5" fill="#7F77DD"/>
+          <line x1="70" y1="70" x2="84" y2="56" stroke="#EEEDFE" stroke-width="3" stroke-linecap="round"/>
+          <line x1="70" y1="70" x2="70" y2="85" stroke="#EEEDFE" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div class="splash-name">attune</div>
+        <div class="splash-tag">relationship intelligence</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Home screen mockup -->
+  <div class="card">
+    <div class="label">Home Screen</div>
+    <div class="homescreen">
+      <div class="hs-inner">
+        <div class="hs-wallpaper"></div>
+        <div class="hs-status">
+          <span>9:41</span>
+          <span>●●●●  WiFi  🔋</span>
+        </div>
+        <div class="hs-apps">
+          <div class="hs-app-icon">
+            <svg width="36" height="36" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r="62" fill="#EEEDFE"/>
+              <circle cx="70" cy="70" r="38" fill="#AFA9EC"/>
+              <circle cx="70" cy="70" r="23" fill="#7F77DD"/>
+              <line x1="70" y1="70" x2="84" y2="56" stroke="#EEEDFE" stroke-width="4" stroke-linecap="round"/>
+              <line x1="70" y1="70" x2="70" y2="85" stroke="#EEEDFE" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="hs-app-name">attune</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
