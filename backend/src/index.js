@@ -14,7 +14,7 @@ import { biometricRoutes } from './routes/biometrics.js'
 import { cycleRoutes } from './routes/cycles.js'
 import { subscriptionRoutes } from './routes/subscriptions.js'
 import { notificationRoutes } from './routes/notifications.js'
-import { db } from './db/client.js'
+import { db, runMigrations } from './db/client.js'
 
 dotenv.config()
 
@@ -76,6 +76,7 @@ const start = async () => {
     const client = await db.connect()
     client.release()
     app.log.info('Database connected')
+    await runMigrations()
     await app.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' })
   } catch (err) {
     console.error('STARTUP ERROR:', err)
