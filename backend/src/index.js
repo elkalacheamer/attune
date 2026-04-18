@@ -19,13 +19,12 @@ import { redis } from './db/redis.js'
 
 dotenv.config()
 
+const isDev = process.env.NODE_ENV !== 'production'
+
 const app = Fastify({
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: { colorize: true }
-    }
-  }
+  logger: isDev
+    ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
+    : true
 })
 
 // ── Plugins ──────────────────────────────────────────────
