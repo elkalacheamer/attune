@@ -1,8 +1,6 @@
 -- Attune database schema
 -- Run with: node src/db/migrate.js
 
--- Enable TimescaleDB extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ── Users ────────────────────────────────────────────────
@@ -63,7 +61,7 @@ CREATE TABLE IF NOT EXISTS wearable_connections (
   UNIQUE(user_id, provider)
 );
 
--- ── Biometric readings (TimescaleDB hypertable) ───────────
+-- ── Biometric readings ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS biometric_readings (
   time        TIMESTAMPTZ NOT NULL,
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -73,8 +71,7 @@ CREATE TABLE IF NOT EXISTS biometric_readings (
   metadata    JSONB
 );
 
--- Convert to hypertable for time-series performance
-SELECT create_hypertable('biometric_readings', 'time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS biometric_readings_user_time_idx ON biometric_readings (user_id, time DESC);
 
 -- Index for fast per-user queries
 CREATE INDEX IF NOT EXISTS idx_biometric_user_metric ON biometric_readings (user_id, metric, time DESC);
