@@ -14,6 +14,7 @@ import { biometricRoutes } from './routes/biometrics.js'
 import { cycleRoutes } from './routes/cycles.js'
 import { subscriptionRoutes } from './routes/subscriptions.js'
 import { notificationRoutes } from './routes/notifications.js'
+import { legalRoutes } from './routes/legal.js'
 import { db, runMigrations } from './db/client.js'
 
 dotenv.config()
@@ -66,6 +67,7 @@ await app.register(biometricRoutes,    { prefix: '/api/biometrics' })
 await app.register(cycleRoutes,        { prefix: '/api/cycles' })
 await app.register(subscriptionRoutes, { prefix: '/api/subscriptions' })
 await app.register(notificationRoutes, { prefix: '/api/notifications' })
+await app.register(legalRoutes)
 
 // ── Health check ──────────────────────────────────────────
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
