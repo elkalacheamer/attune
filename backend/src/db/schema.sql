@@ -3,6 +3,15 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ── One-time cleanup: remove physiologically impossible readings ──
+DELETE FROM biometric_readings WHERE metric = 'rhr'              AND (value < 30  OR value > 120);
+DELETE FROM biometric_readings WHERE metric = 'hrv'              AND (value < 5   OR value > 300);
+DELETE FROM biometric_readings WHERE metric = 'respiratory_rate' AND (value < 6   OR value > 40);
+DELETE FROM biometric_readings WHERE metric = 'temperature'      AND (value < 34  OR value > 41);
+DELETE FROM biometric_readings WHERE metric = 'sleep_hours'      AND (value < 0.5 OR value > 16);
+DELETE FROM biometric_readings WHERE metric = 'recovery_score'   AND (value < 0   OR value > 100);
+DELETE FROM biometric_readings WHERE metric = 'stress_score'     AND (value < 0   OR value > 100);
+
 -- ── Users ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

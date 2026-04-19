@@ -3,6 +3,27 @@ import { db } from '../db/client.js'
 const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'
 const WHOOP_API_BASE  = 'https://api.prod.whoop.com/developer/v1'
 
+// Physiological sanity ranges (mirrors biometrics.js)
+const RANGES = {
+  hrv:              { min: 5,   max: 300 },
+  rhr:              { min: 30,  max: 120 },
+  sleep_hours:      { min: 0.5, max: 16  },
+  recovery_score:   { min: 0,   max: 100 },
+  stress_score:     { min: 0,   max: 100 },
+  respiratory_rate: { min: 6,   max: 40  },
+  temperature:      { min: 34,  max: 41  },
+}
+
+function inRange(metric, value) {
+  const r = RANGES[metric]
+  return !r || (value >= r.min && value <= r.max)
+}
+
+function push(readings, entry) {
+  if (inRange(entry.metric, entry.value)) readings.push(entry)
+  else console.warn(`[WHOOP] Out-of-range dropped: ${entry.metric}=${entry.value}`)
+}
+
 async function whoopFetch(path, accessToken) {
   const res = await fetch(`${WHOOP_API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -68,9 +89,9 @@ export async function syncWhoopData(userId, accessToken) {
   try {
     const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
     for (const r of data?.records || []) {
-      if (r.score?.hrv_rmssd_milli)    readings.push({ time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
-      if (r.score?.resting_heart_rate) readings.push({ time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
-      if (r.score?.recovery_score)     readings.push({ time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
+      if (r.score?.hrv_rmssd_milli)    push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
+      if (r.score?.resting_heart_rate) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
+      if (r.score?.recovery_score)     push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Recovery sync error:', e.message) }
 
@@ -79,9 +100,9 @@ export async function syncWhoopData(userId, accessToken) {
     const data = await whoopFetch(`/sleep?start=${startStr}&end=${endStr}`, accessToken)
     for (const s of data?.records || []) {
       if (s.score?.total_in_bed_time_milli)
-        readings.push({ time: s.end, metric: 'sleep_hours',     value: s.score.total_in_bed_time_milli / 3_600_000, source: 'whoop' })
+        push(readings, { time: s.end, metric: 'sleep_hours',     value: s.score.total_in_bed_time_milli / 3_600_000, source: 'whoop' })
       if (s.score?.respiratory_rate)
-        readings.push({ time: s.end, metric: 'respiratory_rate', value: s.score.respiratory_rate, source: 'whoop' })
+        push(readings, { time: s.end, metric: 'respiratory_rate', value: s.score.respiratory_rate, source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Sleep sync error:', e.message) }
 
@@ -90,7 +111,7 @@ export async function syncWhoopData(userId, accessToken) {
     const data = await whoopFetch(`/cycle?start=${startStr}&end=${endStr}`, accessToken)
     for (const c of data?.records || []) {
       if (c.score?.strain != null) {
-        readings.push({
+        push(readings, {
           time:   c.end || c.created_at,
           metric: 'stress_score',
           value:  Math.round((c.score.strain / 21) * 100),

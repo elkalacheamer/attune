@@ -5,6 +5,24 @@ import { syncWhoopData, refreshWhoopTokenIfNeeded } from '../services/whoopSync.
 const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth'
 const REDIRECT_URI   = 'attune://whoop-callback'
 
+// Physiologically sane ranges — readings outside these are discarded
+const METRIC_RANGES = {
+  hrv:              { min: 5,    max: 300   },  // ms RMSSD
+  rhr:              { min: 30,   max: 120   },  // bpm (120 is generous upper bound for resting)
+  sleep_hours:      { min: 0.5,  max: 16    },  // hrs
+  recovery_score:   { min: 0,    max: 100   },  // %
+  stress_score:     { min: 0,    max: 100   },  // %
+  respiratory_rate: { min: 6,    max: 40    },  // breaths/min
+  temperature:      { min: 34,   max: 41    },  // °C
+  steps:            { min: 0,    max: 100000},  // steps/day
+}
+
+function isInRange(metric, value) {
+  const range = METRIC_RANGES[metric]
+  if (!range) return true
+  return value >= range.min && value <= range.max
+}
+
 const readingSchema = z.object({
   metric: z.enum(['hrv', 'rhr', 'sleep_hours', 'recovery_score', 'temperature', 'respiratory_rate', 'stress_score', 'steps']),
   value: z.number(),
@@ -26,8 +44,15 @@ export async function biometricRoutes(app) {
       if (!result.success) {
         return reply.code(400).send({ error: 'Invalid reading', details: result.error.flatten() })
       }
+      // Silently drop physiologically impossible values
+      if (!isInRange(result.data.metric, result.data.value)) {
+        console.warn(`[Biometrics] Out-of-range reading dropped: ${result.data.metric}=${result.data.value} from ${result.data.source}`)
+        continue
+      }
       validated.push(result.data)
     }
+
+    if (validated.length === 0) return reply.code(201).send({ inserted: 0 })
 
     const values = validated.map((_, i) => {
       const b = i * 5
