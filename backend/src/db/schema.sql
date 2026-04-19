@@ -155,6 +155,23 @@ CREATE TABLE IF NOT EXISTS insights (
   expires_at       TIMESTAMPTZ
 );
 
+-- ── Relationship dates ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS relationship_dates (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  couple_id    UUID REFERENCES couples(id) ON DELETE CASCADE,
+  created_by   UUID REFERENCES users(id) ON DELETE CASCADE,
+  type         TEXT NOT NULL CHECK (type IN ('anniversary', 'birthday', 'first_date', 'engagement', 'custom')),
+  title        TEXT NOT NULL,
+  date         DATE NOT NULL,
+  is_annual    BOOLEAN DEFAULT TRUE,
+  remind_days  INT NOT NULL DEFAULT 3,
+  notes        TEXT,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_relationship_dates_couple ON relationship_dates (couple_id);
+
 -- ── Subscriptions ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS subscriptions (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

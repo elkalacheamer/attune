@@ -1,7 +1,65 @@
 import { db } from '../db/client.js'
 import { syncWhoopData, refreshWhoopTokenIfNeeded } from '../services/whoopSync.js'
+import { nextOccurrence } from '../routes/dates.js'
 
-const SYNC_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+const SYNC_INTERVAL_MS     = 60 * 60 * 1000       // 1 hour
+const REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000  // 24 hours
+
+// ── Send Expo push notification ───────────────────────────
+async function sendPush(token, title, body, data = {}) {
+  if (!token || !token.startsWith('ExponentPushToken')) return
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ to: token, title, body, data, sound: 'default' })
+    })
+  } catch (e) {
+    console.error('[SyncJob] Push send error:', e.message)
+  }
+}
+
+// ── Date reminders ────────────────────────────────────────
+async function runDateReminders() {
+  console.log('[DateReminders] Checking upcoming relationship dates...')
+  try {
+    const { rows: dates } = await db.query(
+      `SELECT rd.*, c.female_user_id, c.male_user_id
+       FROM relationship_dates rd
+       JOIN couples c ON c.id = rd.couple_id`
+    )
+
+    const toNotify = []
+    for (const d of dates) {
+      const dateStr = d.date.toISOString().slice(0, 10)
+      const { daysUntil } = nextOccurrence(dateStr, d.is_annual)
+      if (daysUntil !== d.remind_days && daysUntil !== 1 && daysUntil !== 0) continue
+      const when = daysUntil === 0 ? 'is today! 🎉'
+                 : daysUntil === 1 ? 'is tomorrow'
+                 : `is in ${daysUntil} days`
+      toNotify.push({ d, when, daysUntil, userIds: [d.female_user_id, d.male_user_id].filter(Boolean) })
+    }
+
+    if (!toNotify.length) { console.log('[DateReminders] No reminders due.'); return }
+
+    for (const { d, when, daysUntil, userIds } of toNotify) {
+      for (const userId of userIds) {
+        const { rows: tokens } = await db.query(
+          `SELECT token FROM device_tokens WHERE user_id = $1`, [userId]
+        )
+        for (const { token } of tokens) {
+          const notifBody = daysUntil === 0
+            ? `Today is ${d.title}! Make it special. 💕`
+            : `${d.title} ${when}. Time to plan something meaningful.`
+          await sendPush(token, `📅 ${d.title}`, notifBody, { type: 'date_reminder', dateId: d.id })
+        }
+      }
+    }
+    console.log(`[DateReminders] Sent reminders for ${toNotify.length} date(s).`)
+  } catch (e) {
+    console.error('[DateReminders] Error:', e.message)
+  }
+}
 
 async function runWhoopSync() {
   console.log('[SyncJob] Starting hourly WHOOP sync...')
@@ -41,8 +99,13 @@ async function runWhoopSync() {
 }
 
 export function startSyncJob() {
-  // Run once shortly after startup, then every hour
+  // WHOOP sync: 30s after startup, then every hour
   setTimeout(runWhoopSync, 30_000)
   setInterval(runWhoopSync, SYNC_INTERVAL_MS)
   console.log('[SyncJob] Hourly WHOOP sync job scheduled.')
+
+  // Date reminders: 60s after startup, then every 24h
+  setTimeout(runDateReminders, 60_000)
+  setInterval(runDateReminders, REMINDER_INTERVAL_MS)
+  console.log('[SyncJob] Daily date reminder job scheduled.')
 }

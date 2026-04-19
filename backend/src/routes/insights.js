@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/client.js'
+import { nextOccurrence } from './dates.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -18,7 +19,7 @@ async function cacheSet(key, ttl, value) {
 }
 
 async function generateInsights(userId, coupleId) {
-  const [bioResult, eventsResult, userResult, cycleResult] = await Promise.all([
+  const [bioResult, eventsResult, userResult, cycleResult, datesResult] = await Promise.all([
     db.query(
       `SELECT DISTINCT ON (metric) metric, value, source,
               AVG(value) OVER (PARTITION BY metric) as avg_7d
@@ -53,6 +54,10 @@ async function generateInsights(userId, coupleId) {
     db.query(
       `SELECT day_number, phase FROM cycle_days WHERE user_id = $1 AND date = CURRENT_DATE`,
       [userId]
+    ),
+    db.query(
+      `SELECT * FROM relationship_dates WHERE couple_id = $1`,
+      [coupleId]
     )
   ])
 
@@ -78,17 +83,36 @@ async function generateInsights(userId, coupleId) {
     ? `Cycle day ${cycleDay.day_number}, ${cycleDay.phase} phase`
     : null
 
+  // Upcoming dates within 30 days
+  const upcomingDates = datesResult.rows
+    .map(r => {
+      const dateStr = r.date.toISOString().slice(0, 10)
+      const { daysUntil } = nextOccurrence(dateStr, r.is_annual)
+      return { ...r, daysUntil }
+    })
+    .filter(r => r.daysUntil >= 0 && r.daysUntil <= 30)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+
+  const datesText = upcomingDates.length > 0
+    ? upcomingDates.map(d => {
+        const when = d.daysUntil === 0 ? 'TODAY' : `in ${d.daysUntil} day${d.daysUntil === 1 ? '' : 's'}`
+        return `${d.title} (${d.type}) — ${when}`
+      }).join('\n')
+    : null
+
   const prompt = `Generate 2-3 personalised relationship insights for this Attune user.
 
 Profile: ${user.name}, ${user.sex}, couple status: ${user.couple_status || 'unpaired'}
 ${cycleText ? cycleText : ''}
 
-Biometrics (7d): ${bioText}
+Biometrics (7d):
+${bioText}
 
 Recent relationship events (14d):
 ${eventsText}
-
+${datesText ? `\nUpcoming relationship dates:\n${datesText}` : ''}
 Generate warm, actionable insights connecting health patterns to relationship dynamics.
+If there are upcoming dates (especially within 7 days), include a thoughtful reminder insight with specific celebration or preparation ideas.
 
 Respond ONLY with a JSON array:
 [
