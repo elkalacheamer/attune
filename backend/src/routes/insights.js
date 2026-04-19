@@ -1,14 +1,125 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/client.js'
-import { redis } from '../db/redis.js'
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+// Redis is optional — graceful no-op if unavailable
+async function cacheGet(key) {
+  try {
+    const { redis } = await import('../db/redis.js')
+    return await redis.get(key)
+  } catch { return null }
+}
+async function cacheSet(key, ttl, value) {
+  try {
+    const { redis } = await import('../db/redis.js')
+    await redis.setex(key, ttl, value)
+  } catch {}
+}
+
+async function generateInsights(userId, coupleId) {
+  const [bioResult, eventsResult, userResult, cycleResult] = await Promise.all([
+    db.query(
+      `SELECT DISTINCT ON (metric) metric, value
+       FROM biometric_readings
+       WHERE user_id = $1 AND time > NOW() - INTERVAL '7 days'
+       ORDER BY metric, time DESC`,
+      [userId]
+    ),
+    db.query(
+      `SELECT event_type, sentiment, intensity, topic
+       FROM relationship_events
+       WHERE couple_id = $1 AND occurred_at > NOW() - INTERVAL '14 days'
+       ORDER BY occurred_at DESC LIMIT 20`,
+      [coupleId]
+    ),
+    db.query(
+      `SELECT u.name, u.sex, c.status as couple_status
+       FROM users u
+       LEFT JOIN couples c ON (c.female_user_id = u.id OR c.male_user_id = u.id)
+       WHERE u.id = $1`,
+      [userId]
+    ),
+    db.query(
+      `SELECT day_number, phase FROM cycle_days WHERE user_id = $1 AND date = CURRENT_DATE`,
+      [userId]
+    )
+  ])
+
+  const user = userResult.rows[0]
+  if (!user) return
+
+  const bioText = bioResult.rows.length > 0
+    ? bioResult.rows.map(b => `${b.metric}: ${parseFloat(b.value).toFixed(1)}`).join(', ')
+    : 'No biometric data yet'
+
+  const eventsText = eventsResult.rows.length > 0
+    ? eventsResult.rows.map(e => `${e.event_type} (${e.sentiment}, ${e.intensity}) — ${e.topic}`).join('\n')
+    : 'No recent relationship events'
+
+  const cycleDay = cycleResult.rows[0]
+  const cycleText = user.sex === 'female' && cycleDay
+    ? `Cycle day ${cycleDay.day_number}, ${cycleDay.phase} phase`
+    : null
+
+  const prompt = `Generate 2-3 personalised relationship insights for this Attune user.
+
+Profile: ${user.name}, ${user.sex}, couple status: ${user.couple_status || 'unpaired'}
+${cycleText ? cycleText : ''}
+
+Biometrics (7d): ${bioText}
+
+Recent relationship events (14d):
+${eventsText}
+
+Generate warm, actionable insights connecting health patterns to relationship dynamics.
+
+Respond ONLY with a JSON array:
+[
+  {
+    "insight_type": "cycle_alert" | "stress_alert" | "conflict_timing" | "intimacy_pattern" | "general",
+    "title": "max 8 word title",
+    "body": "2-3 sentence insight",
+    "tag": "brief card label",
+    "confidence": 0.0 to 1.0
+  }
+]`
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }]
+    })
+
+    const raw = response.content[0]?.text || ''
+    const match = raw.match(/\[[\s\S]*\]/)
+    if (!match) return
+
+    const insights = JSON.parse(match[0])
+    for (const insight of insights) {
+      await db.query(
+        `INSERT INTO insights
+           (couple_id, recipient_id, insight_type, title, body, tag, confidence, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7, NOW() + INTERVAL '24 hours')`,
+        [coupleId, userId, insight.insight_type || 'general',
+         insight.title, insight.body, insight.tag || null, insight.confidence || 0.7]
+      )
+    }
+  } catch (e) {
+    console.error('Insight generation error:', e.message)
+  }
+}
 
 export async function insightRoutes(app) {
 
-  // GET /api/insights/today — get today's insights for the user
+  // GET /api/insights/today
   app.get('/today', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId, coupleId } = request.user
+    const today = new Date().toISOString().slice(0, 10)
+    const cacheKey = `insights:${userId}:${today}`
 
-    const cacheKey = `insights:${userId}:${new Date().toISOString().slice(0, 10)}`
-    const cached = await redis.get(cacheKey)
+    const cached = await cacheGet(cacheKey)
     if (cached) return reply.send(JSON.parse(cached))
 
     const result = await db.query(
@@ -16,39 +127,32 @@ export async function insightRoutes(app) {
        WHERE recipient_id = $1
          AND delivered_at::date = CURRENT_DATE
          AND (expires_at IS NULL OR expires_at > NOW())
-       ORDER BY confidence DESC, delivered_at DESC
-       LIMIT 10`,
+       ORDER BY confidence DESC, delivered_at DESC LIMIT 10`,
       [userId]
     )
 
-    // If no insights yet, trigger generation
     if (result.rows.length === 0) {
-      await triggerInsightGeneration(userId, coupleId, app)
+      // Generate in background — don't block the response
+      generateInsights(userId, coupleId).catch(e => app.log.warn('Insight gen error:', e.message))
+      return reply.send([])
     }
 
-    const insights = result.rows
-    await redis.setex(cacheKey, 3600, JSON.stringify(insights))
-
-    return reply.send(insights)
-  })
-
-  // GET /api/insights/history — past 30 days
-  app.get('/history', { onRequest: [app.authenticate] }, async (request, reply) => {
-    const { userId } = request.user
-    const { limit = 50, offset = 0 } = request.query
-
-    const result = await db.query(
-      `SELECT * FROM insights
-       WHERE recipient_id = $1
-       ORDER BY delivered_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, parseInt(limit), parseInt(offset)]
-    )
-
+    await cacheSet(cacheKey, 3600, JSON.stringify(result.rows))
     return reply.send(result.rows)
   })
 
-  // POST /api/insights/:id/feedback — helpful or not_helpful
+  // GET /api/insights/history
+  app.get('/history', { onRequest: [app.authenticate] }, async (request, reply) => {
+    const { userId } = request.user
+    const result = await db.query(
+      `SELECT * FROM insights WHERE recipient_id = $1
+       ORDER BY delivered_at DESC LIMIT $2 OFFSET $3`,
+      [userId, parseInt(request.query.limit || 50), parseInt(request.query.offset || 0)]
+    )
+    return reply.send(result.rows)
+  })
+
+  // POST /api/insights/:id/feedback
   app.post('/:id/feedback', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { id } = request.params
     const { feedback } = request.body
@@ -62,17 +166,9 @@ export async function insightRoutes(app) {
       `UPDATE insights SET feedback = $1 WHERE id = $2 AND recipient_id = $3`,
       [feedback, id, userId]
     )
-
-    // Forward feedback to AI service for model learning
-    try {
-      await fetch(`${process.env.AI_SERVICE_URL}/feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ insightId: id, userId, feedback })
-      })
-    } catch (e) {
-      app.log.warn('AI service feedback failed:', e.message)
-    }
+    // Bust cache so UI reflects updated feedback
+    const today = new Date().toISOString().slice(0, 10)
+    await cacheSet(`insights:${userId}:${today}`, 1, '[]')
 
     return reply.send({ success: true })
   })
@@ -81,24 +177,10 @@ export async function insightRoutes(app) {
   app.post('/:id/read', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { id } = request.params
     const { userId } = request.user
-
     await db.query(
-      `UPDATE insights SET is_read = TRUE WHERE id = $2 AND recipient_id = $1`,
-      [userId, id]
+      `UPDATE insights SET is_read = TRUE WHERE id = $1 AND recipient_id = $2`,
+      [id, userId]
     )
-
     return reply.send({ success: true })
   })
-}
-
-async function triggerInsightGeneration(userId, coupleId, app) {
-  try {
-    await fetch(`${process.env.AI_SERVICE_URL}/generate-insights`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, coupleId })
-    })
-  } catch (e) {
-    app.log.warn('AI insight generation trigger failed:', e.message)
-  }
 }
