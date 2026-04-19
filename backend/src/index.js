@@ -15,6 +15,7 @@ import { cycleRoutes } from './routes/cycles.js'
 import { subscriptionRoutes } from './routes/subscriptions.js'
 import { notificationRoutes } from './routes/notifications.js'
 import { legalRoutes } from './routes/legal.js'
+import { startSyncJob } from './jobs/syncJob.js'
 import { db, runMigrations } from './db/client.js'
 
 dotenv.config()
@@ -80,6 +81,7 @@ const start = async () => {
     app.log.info('Database connected')
     await runMigrations()
     await app.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' })
+    startSyncJob()
   } catch (err) {
     console.error('STARTUP ERROR:', err)
     process.exit(1)
