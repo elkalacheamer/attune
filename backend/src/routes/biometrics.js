@@ -66,6 +66,48 @@ async function syncWhoopData(userId, accessToken) {
     }
   } catch (e) { console.error('WHOOP sleep sync error:', e.message) }
 
+  // Cycles — day strain → stress score proxy, plus average HR
+  try {
+    const cycleData = await whoopFetch(
+      `/cycle?start=${startStr}&end=${endStr}`, accessToken
+    )
+    for (const c of cycleData?.records || []) {
+      if (c.score?.strain != null) {
+        // Convert WHOOP strain (0-21) to a 0-100 stress score
+        const stressScore = Math.round((c.score.strain / 21) * 100)
+        readings.push({
+          time:   c.end || c.created_at,
+          metric: 'stress_score',
+          value:  stressScore,
+          source: 'whoop',
+          metadata: { raw_strain: c.score.strain }
+        })
+      }
+      if (c.score?.average_heart_rate) {
+        readings.push({
+          time:   c.end || c.created_at,
+          metric: 'rhr',
+          value:  c.score.average_heart_rate,
+          source: 'whoop'
+        })
+      }
+    }
+  } catch (e) { console.error('WHOOP cycles sync error:', e.message) }
+
+  // Body measurements — max heart rate
+  try {
+    const bodyData = await whoopFetch('/user/measurement/body', accessToken)
+    if (bodyData?.max_heart_rate) {
+      readings.push({
+        time:   new Date().toISOString(),
+        metric: 'rhr',
+        value:  bodyData.max_heart_rate,
+        source: 'whoop',
+        metadata: { type: 'max_heart_rate' }
+      })
+    }
+  } catch (e) { console.error('WHOOP body measurement sync error:', e.message) }
+
   if (readings.length > 0) {
     const values = readings.map((_, i) => {
       const b = i * 5
