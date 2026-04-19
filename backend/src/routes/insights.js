@@ -20,10 +20,20 @@ async function cacheSet(key, ttl, value) {
 async function generateInsights(userId, coupleId) {
   const [bioResult, eventsResult, userResult, cycleResult] = await Promise.all([
     db.query(
-      `SELECT DISTINCT ON (metric) metric, value
+      `SELECT DISTINCT ON (metric) metric, value, source,
+              AVG(value) OVER (PARTITION BY metric) as avg_7d
        FROM biometric_readings
        WHERE user_id = $1 AND time > NOW() - INTERVAL '7 days'
-       ORDER BY metric, time DESC`,
+       ORDER BY metric,
+         CASE source
+           WHEN 'whoop'        THEN 1
+           WHEN 'oura'         THEN 2
+           WHEN 'garmin'       THEN 3
+           WHEN 'apple_health' THEN 4
+           WHEN 'manual'       THEN 5
+           ELSE 6
+         END ASC,
+         time DESC`,
       [userId]
     ),
     db.query(
@@ -50,7 +60,13 @@ async function generateInsights(userId, coupleId) {
   if (!user) return
 
   const bioText = bioResult.rows.length > 0
-    ? bioResult.rows.map(b => `${b.metric}: ${parseFloat(b.value).toFixed(1)}`).join(', ')
+    ? bioResult.rows.map(b => {
+        const val = parseFloat(b.value).toFixed(1)
+        const avg = b.avg_7d ? parseFloat(b.avg_7d).toFixed(1) : null
+        const dev = avg ? ((b.value - b.avg_7d) / b.avg_7d * 100).toFixed(0) : null
+        const devStr = dev ? ` (${dev > 0 ? '+' : ''}${dev}% vs 7d avg)` : ''
+        return `${b.metric}: ${val}${devStr} [${b.source}]`
+      }).join('\n')
     : 'No biometric data yet'
 
   const eventsText = eventsResult.rows.length > 0
