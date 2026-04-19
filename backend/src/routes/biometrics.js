@@ -208,7 +208,7 @@ export async function biometricRoutes(app) {
       client_id:     clientId,
       redirect_uri:  REDIRECT_URI,
       response_type: 'code',
-      scope:         'read:recovery read:sleep read:profile read:workout read:cycles read:body_measurement',
+      scope:         'read:recovery read:cycles read:sleep read:workout read:body_measurement read:profile',
       state
     })
 
