@@ -5,13 +5,14 @@ const WHOOP_API_BASE  = 'https://api.prod.whoop.com/developer/v1'
 
 // Physiological sanity ranges (mirrors biometrics.js)
 const RANGES = {
-  hrv:              { min: 5,   max: 300 },
-  rhr:              { min: 30,  max: 120 },
-  sleep_hours:      { min: 0.5, max: 16  },
-  recovery_score:   { min: 0,   max: 100 },
-  stress_score:     { min: 0,   max: 100 },
-  respiratory_rate: { min: 6,   max: 40  },
-  temperature:      { min: 34,  max: 41  },
+  hrv:              { min: 5,   max: 300  },
+  rhr:              { min: 30,  max: 120  },
+  sleep_hours:      { min: 0.5, max: 16   },
+  recovery_score:   { min: 0,   max: 100  },
+  stress_score:     { min: 0,   max: 100  },
+  respiratory_rate: { min: 6,   max: 40   },
+  temperature:      { min: 34,  max: 41   },
+  calories:         { min: 0,   max: 8000 },
 }
 
 function inRange(metric, value) {
@@ -115,6 +116,15 @@ export async function syncWhoopData(userId, accessToken) {
           time:   c.end || c.created_at,
           metric: 'stress_score',
           value:  Math.round((c.score.strain / 21) * 100),
+          source: 'whoop',
+        })
+      }
+      // Calories from kilojoules (1 kJ ≈ 0.239 kcal)
+      if (c.score?.kilojoule != null) {
+        push(readings, {
+          time:   c.end || c.created_at,
+          metric: 'calories',
+          value:  Math.round(c.score.kilojoule * 0.239),
           source: 'whoop',
         })
       }

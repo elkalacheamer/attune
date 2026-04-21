@@ -16,6 +16,7 @@ const METRIC_RANGES = {
   respiratory_rate: { min: 6,    max: 40    },  // breaths/min
   temperature:      { min: 34,   max: 41    },  // °C
   steps:            { min: 0,    max: 100000},  // steps/day
+  calories:         { min: 0,    max: 8000  },  // kcal/day active energy
 }
 
 function isInRange(metric, value) {
@@ -25,7 +26,7 @@ function isInRange(metric, value) {
 }
 
 const readingSchema = z.object({
-  metric: z.enum(['hrv', 'rhr', 'sleep_hours', 'recovery_score', 'temperature', 'respiratory_rate', 'stress_score', 'steps']),
+  metric: z.enum(['hrv', 'rhr', 'sleep_hours', 'recovery_score', 'temperature', 'respiratory_rate', 'stress_score', 'steps', 'calories']),
   value: z.number(),
   source: z.enum(['apple_health', 'whoop', 'oura', 'garmin', 'manual']),
   time: z.string().optional(),
