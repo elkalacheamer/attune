@@ -2,8 +2,9 @@ import { db } from '../db/client.js'
 import { z } from 'zod'
 import { syncWhoopData, refreshWhoopTokenIfNeeded } from '../services/whoopSync.js'
 
-const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth'
-const REDIRECT_URI   = 'attune://whoop-callback'
+const WHOOP_AUTH_URL  = 'https://api.prod.whoop.com/oauth/oauth2/auth'
+const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'
+const REDIRECT_URI    = 'attune://whoop-callback'
 
 // Physiologically sane ranges — readings outside these are discarded
 const METRIC_RANGES = {
