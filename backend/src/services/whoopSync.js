@@ -29,6 +29,11 @@ async function whoopFetch(path, accessToken) {
   const res = await fetch(`${WHOOP_API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   })
+  if (res.status === 401) {
+    const err = new Error(`WHOOP auth expired (401) on ${path}`)
+    err.code = 'WHOOP_AUTH_EXPIRED'
+    throw err
+  }
   if (!res.ok) throw new Error(`WHOOP API error ${res.status} on ${path}`)
   return res.json()
 }
@@ -63,13 +68,15 @@ export async function refreshWhoopTokenIfNeeded(userId, { access_token, refresh_
     const tokens     = await res.json()
     const newExpires = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
+    // Save BOTH the new access_token AND the new refresh_token (WHOOP rotates them)
     await db.query(
       `UPDATE wearable_connections
-       SET access_token = $1, token_expires = $2
-       WHERE user_id = $3 AND provider = 'whoop'`,
-      [tokens.access_token, newExpires, userId]
+       SET access_token = $1, refresh_token = $2, token_expires = $3
+       WHERE user_id = $4 AND provider = 'whoop'`,
+      [tokens.access_token, tokens.refresh_token, newExpires, userId]
     )
 
+    console.log(`[WHOOP] Token refreshed for user ${userId}, expires ${newExpires}`)
     return tokens.access_token
   } catch (e) {
     console.error('[WHOOP] Token refresh error:', e.message)

@@ -89,6 +89,15 @@ async function runWhoopSync() {
         console.log(`[SyncJob] User ${conn.user_id}: ${count} readings synced.`)
       } catch (e) {
         console.error(`[SyncJob] Failed for user ${conn.user_id}:`, e.message)
+        // If WHOOP rejected the token, mark connection as needing re-auth
+        if (e.code === 'WHOOP_AUTH_EXPIRED') {
+          await db.query(
+            `UPDATE wearable_connections SET status = 'needs_reauth'
+             WHERE user_id = $1 AND provider = 'whoop'`,
+            [conn.user_id]
+          ).catch(() => {})
+          console.warn(`[SyncJob] Marked WHOOP as needs_reauth for user ${conn.user_id}`)
+        }
       }
     }
 
