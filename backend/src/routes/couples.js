@@ -21,6 +21,33 @@ export async function coupleRoutes(app) {
     return reply.send(result.rows[0])
   })
 
+  // GET /api/couples/score — shared relationship score (same for both partners)
+  app.get('/score', { onRequest: [app.authenticate] }, async (request, reply) => {
+    const { coupleId } = request.user
+    if (!coupleId) return reply.send({ score: 50, intimacy: 0, conflict: 0, connection: 0 })
+
+    const result = await db.query(
+      `SELECT event_type, sentiment
+       FROM relationship_events
+       WHERE couple_id = $1 AND occurred_at > NOW() - INTERVAL '30 days'`,
+      [coupleId]
+    )
+
+    const events     = result.rows
+    const intimacy   = events.filter(e => e.event_type === 'intimacy').length
+    const conflict   = events.filter(e => e.event_type === 'conflict').length
+    const connection = events.filter(e => e.event_type === 'connection').length
+    const stress     = events.filter(e => e.event_type === 'stress').length
+
+    const score = Math.max(0, Math.min(100, Math.round(
+      50 + (intimacy * 8) + (connection * 5) - (conflict * 10) - (stress * 3)
+    )))
+
+    const label = score >= 70 ? 'Strong' : score >= 45 ? 'Developing' : 'Needs attention'
+
+    return reply.send({ score, label, intimacy, conflict, connection, stress, total: events.length })
+  })
+
   // GET /api/couples/partner-summary — partner's shared health/mood data
   app.get('/partner-summary', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId, coupleId, sex } = request.user

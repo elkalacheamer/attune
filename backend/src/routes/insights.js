@@ -19,71 +19,127 @@ async function cacheSet(key, ttl, value) {
 }
 
 async function generateInsights(userId, coupleId) {
-  const [bioResult, eventsResult, userResult, cycleResult, datesResult] = await Promise.all([
+  // Get partner's userId first
+  const coupleRow = await db.query(
+    `SELECT female_user_id, male_user_id FROM couples WHERE id = $1`, [coupleId]
+  )
+  const coupleData  = coupleRow.rows[0]
+  const partnerUserId = coupleData
+    ? (coupleData.female_user_id === userId ? coupleData.male_user_id : coupleData.female_user_id)
+    : null
+
+  const queries = [
+    // 0 — user biometrics
     db.query(
       `SELECT DISTINCT ON (metric) metric, value, source,
               AVG(value) OVER (PARTITION BY metric) as avg_7d
        FROM biometric_readings
        WHERE user_id = $1 AND time > NOW() - INTERVAL '7 days'
        ORDER BY metric,
-         CASE source
-           WHEN 'whoop'        THEN 1
-           WHEN 'oura'         THEN 2
-           WHEN 'garmin'       THEN 3
-           WHEN 'apple_health' THEN 4
-           WHEN 'manual'       THEN 5
-           ELSE 6
-         END ASC,
-         time DESC`,
+         CASE source WHEN 'whoop' THEN 1 WHEN 'oura' THEN 2 WHEN 'garmin' THEN 3
+           WHEN 'apple_health' THEN 4 WHEN 'manual' THEN 5 ELSE 6 END ASC, time DESC`,
       [userId]
     ),
+    // 1 — couple relationship events
     db.query(
-      `SELECT event_type, sentiment, intensity, topic
+      `SELECT event_type, sentiment, intensity, topic, logged_by
        FROM relationship_events
        WHERE couple_id = $1 AND occurred_at > NOW() - INTERVAL '14 days'
        ORDER BY occurred_at DESC LIMIT 20`,
       [coupleId]
     ),
+    // 2 — user info
     db.query(
       `SELECT u.name, u.sex, c.status as couple_status
-       FROM users u
-       LEFT JOIN couples c ON (c.female_user_id = u.id OR c.male_user_id = u.id)
-       WHERE u.id = $1`,
-      [userId]
+       FROM users u LEFT JOIN couples c ON (c.female_user_id = u.id OR c.male_user_id = u.id)
+       WHERE u.id = $1`, [userId]
     ),
+    // 3 — user cycle
     db.query(
-      `SELECT day_number, phase FROM cycle_days WHERE user_id = $1 AND date = CURRENT_DATE`,
-      [userId]
+      `SELECT day_number, phase FROM cycle_days WHERE user_id = $1 AND date = CURRENT_DATE`, [userId]
     ),
+    // 4 — relationship dates
+    db.query(`SELECT * FROM relationship_dates WHERE couple_id = $1`, [coupleId]),
+    // 5 — user mood
     db.query(
-      `SELECT * FROM relationship_dates WHERE couple_id = $1`,
-      [coupleId]
-    )
-  ])
+      `SELECT score FROM mood_checkins WHERE user_id = $1 AND date = CURRENT_DATE`, [userId]
+    ),
+    // 6 — partner biometrics (if paired)
+    partnerUserId
+      ? db.query(
+          `SELECT DISTINCT ON (metric) metric, value, source
+           FROM biometric_readings
+           WHERE user_id = $1 AND time > NOW() - INTERVAL '7 days'
+           ORDER BY metric, time DESC`, [partnerUserId]
+        )
+      : Promise.resolve({ rows: [] }),
+    // 7 — partner info + cycle
+    partnerUserId
+      ? db.query(`SELECT name, sex FROM users WHERE id = $1`, [partnerUserId])
+      : Promise.resolve({ rows: [] }),
+    // 8 — partner cycle
+    partnerUserId
+      ? db.query(
+          `SELECT day_number, phase FROM cycle_days WHERE user_id = $1 AND date = CURRENT_DATE`,
+          [partnerUserId]
+        )
+      : Promise.resolve({ rows: [] }),
+    // 9 — partner mood
+    partnerUserId
+      ? db.query(
+          `SELECT score FROM mood_checkins WHERE user_id = $1 AND date = CURRENT_DATE`,
+          [partnerUserId]
+        )
+      : Promise.resolve({ rows: [] }),
+  ]
+
+  const [bioResult, eventsResult, userResult, cycleResult, datesResult,
+         moodResult, partnerBioResult, partnerUserResult, partnerCycleResult, partnerMoodResult]
+    = await Promise.all(queries)
 
   const user = userResult.rows[0]
   if (!user) return
 
+  // ── Current user context ─────────────────────────────────
   const bioText = bioResult.rows.length > 0
     ? bioResult.rows.map(b => {
         const val = parseFloat(b.value).toFixed(1)
-        const avg = b.avg_7d ? parseFloat(b.avg_7d).toFixed(1) : null
-        const dev = avg ? ((b.value - b.avg_7d) / b.avg_7d * 100).toFixed(0) : null
+        const dev = b.avg_7d ? ((b.value - b.avg_7d) / b.avg_7d * 100).toFixed(0) : null
         const devStr = dev ? ` (${dev > 0 ? '+' : ''}${dev}% vs 7d avg)` : ''
         return `${b.metric}: ${val}${devStr} [${b.source}]`
       }).join('\n')
     : 'No biometric data yet'
 
+  const cycleDay  = cycleResult.rows[0]
+  const cycleText = user.sex === 'female' && cycleDay
+    ? `Cycle day ${cycleDay.day_number}, ${cycleDay.phase} phase` : null
+
+  const userMood  = moodResult.rows[0]
+  const moodText  = userMood ? `Mood today: ${userMood.score}/5` : null
+
+  // ── Partner context ──────────────────────────────────────
+  const partner         = partnerUserResult.rows[0]
+  const partnerCycleDay = partnerCycleResult.rows[0]
+  const partnerMood     = partnerMoodResult.rows[0]
+
+  const partnerBioText = partner && partnerBioResult.rows.length > 0
+    ? partnerBioResult.rows.map(b => `${b.metric}: ${parseFloat(b.value).toFixed(1)} [${b.source}]`).join('\n')
+    : partner ? 'No biometric data' : null
+
+  const partnerCycleText = partner?.sex === 'female' && partnerCycleDay
+    ? `Cycle day ${partnerCycleDay.day_number}, ${partnerCycleDay.phase} phase` : null
+
+  const partnerMoodText = partnerMood ? `Mood today: ${partnerMood.score}/5` : null
+
+  // ── Relationship events ──────────────────────────────────
   const eventsText = eventsResult.rows.length > 0
-    ? eventsResult.rows.map(e => `${e.event_type} (${e.sentiment}, ${e.intensity}) — ${e.topic}`).join('\n')
+    ? eventsResult.rows.map(e => {
+        const who = e.logged_by === userId ? user.name : (partner?.name || 'partner')
+        return `${e.event_type} (${e.sentiment}, ${e.intensity}) — ${e.topic} [logged by ${who}]`
+      }).join('\n')
     : 'No recent relationship events'
 
-  const cycleDay = cycleResult.rows[0]
-  const cycleText = user.sex === 'female' && cycleDay
-    ? `Cycle day ${cycleDay.day_number}, ${cycleDay.phase} phase`
-    : null
-
-  // Upcoming dates within 30 days
+  // ── Upcoming dates ───────────────────────────────────────
   const upcomingDates = datesResult.rows
     .map(r => {
       const dateStr = r.date.toISOString().slice(0, 10)
@@ -102,17 +158,26 @@ async function generateInsights(userId, coupleId) {
 
   const prompt = `Generate 2-3 personalised relationship insights for this Attune user.
 
-Profile: ${user.name}, ${user.sex}, couple status: ${user.couple_status || 'unpaired'}
-${cycleText ? cycleText : ''}
+## Recipient
+Name: ${user.name}, Sex: ${user.sex}, Couple status: ${user.couple_status || 'unpaired'}
+${cycleText ? `Cycle: ${cycleText}` : ''}
+${moodText ? `${moodText}` : ''}
 
-Biometrics (7d):
+## Their biometrics (7d)
 ${bioText}
 
-Recent relationship events (14d):
+${partner ? `## Partner (${partner.name}, ${partner.sex})
+${partnerCycleText ? `Cycle: ${partnerCycleText}` : ''}
+${partnerMoodText ? `${partnerMoodText}` : ''}
+Biometrics:
+${partnerBioText}
+` : ''}
+## Recent relationship events (14d — both partners)
 ${eventsText}
-${datesText ? `\nUpcoming relationship dates:\n${datesText}` : ''}
-Generate warm, actionable insights connecting health patterns to relationship dynamics.
-If there are upcoming dates (especially within 7 days), include a thoughtful reminder insight with specific celebration or preparation ideas.
+${datesText ? `\n## Upcoming relationship dates\n${datesText}` : ''}
+
+Generate warm, personalised insights that use BOTH partners' data. Cross-reference health patterns between partners — e.g. if one is highly stressed and the other has low HRV, flag the compounding effect. If the female partner is in luteal phase, help the male partner understand what to expect.
+If there are upcoming dates within 7 days, include a thoughtful reminder with specific preparation ideas.
 
 Respond ONLY with a JSON array:
 [
