@@ -84,11 +84,15 @@ export async function authRoutes(app) {
     const { email, password } = result.data
 
     const userResult = await db.query(
-      `SELECT u.*, c.id as couple_id, c.invite_code
+      `SELECT u.*, c.id as couple_id, c.invite_code, c.status as couple_status
        FROM users u
-       LEFT JOIN couples c ON (c.female_user_id = u.id OR c.male_user_id = u.id)
-       WHERE u.email = $1
-       LIMIT 1`,
+       LEFT JOIN LATERAL (
+         SELECT * FROM couples
+         WHERE female_user_id = u.id OR male_user_id = u.id
+         ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END
+         LIMIT 1
+       ) c ON true
+       WHERE u.email = $1`,
       [email]
     )
 
@@ -110,7 +114,7 @@ export async function authRoutes(app) {
     return reply.send({
       token,
       user: { id: user.id, email: user.email, name: user.name, sex: user.sex },
-      couple: { id: user.couple_id, inviteCode: user.invite_code }
+      couple: { id: user.couple_id, inviteCode: user.invite_code, status: user.couple_status }
     })
   })
 
