@@ -150,6 +150,19 @@ export async function biometricRoutes(app) {
     return reply.send(result.rows)
   })
 
+  // DELETE /api/biometrics/connections/:provider
+  app.delete('/connections/:provider', { onRequest: [app.authenticate] }, async (request, reply) => {
+    const { userId } = request.user
+    const { provider } = request.params
+
+    await db.query(
+      `DELETE FROM wearable_connections WHERE user_id = $1 AND provider = $2`,
+      [userId, provider]
+    )
+
+    return reply.send({ disconnected: true, provider })
+  })
+
   // POST /api/biometrics/connections (generic)
   app.post('/connections', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId } = request.user
