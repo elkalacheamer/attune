@@ -80,7 +80,7 @@ export async function refreshWhoopTokenIfNeeded(userId, { access_token, refresh_
 // ── Sync all WHOOP data for a user ────────────────────────
 export async function syncWhoopData(userId, accessToken) {
   const start = new Date()
-  start.setDate(start.getDate() - 7)
+  start.setDate(start.getDate() - 14)
   const startStr = start.toISOString()
   const endStr   = new Date().toISOString()
 
@@ -91,6 +91,7 @@ export async function syncWhoopData(userId, accessToken) {
     const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
     for (const r of data?.records || []) {
       if (r.score?.hrv_rmssd_milli    != null) push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
+      else console.warn(`[WHOOP] Recovery record missing HRV — score_state: ${r.score_state}, id: ${r.id}`)
       if (r.score?.resting_heart_rate != null) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
       if (r.score?.recovery_score     != null) push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
     }
