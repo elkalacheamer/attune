@@ -142,7 +142,13 @@ export async function authRoutes(app) {
       [userId, couple.id]
     )
 
-    return reply.send({ message: 'Paired successfully', coupleId: couple.id })
+    // Issue a new JWT so the client immediately uses the correct coupleId
+    const newToken = app.jwt.sign(
+      { userId, email: request.user.email, sex: request.user.sex, coupleId: couple.id },
+      { expiresIn: '30d' }
+    )
+
+    return reply.send({ message: 'Paired successfully', coupleId: couple.id, token: newToken })
   })
 
   // GET /api/auth/me
@@ -154,7 +160,12 @@ export async function authRoutes(app) {
               c.id as couple_id, c.invite_code, c.status as couple_status,
               ps.*
        FROM users u
-       LEFT JOIN couples c ON (c.female_user_id = u.id OR c.male_user_id = u.id)
+       LEFT JOIN LATERAL (
+         SELECT * FROM couples
+         WHERE female_user_id = u.id OR male_user_id = u.id
+         ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END
+         LIMIT 1
+       ) c ON true
        LEFT JOIN privacy_settings ps ON ps.user_id = u.id
        WHERE u.id = $1`,
       [userId]
