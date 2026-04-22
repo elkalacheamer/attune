@@ -90,9 +90,9 @@ export async function syncWhoopData(userId, accessToken) {
   try {
     const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
     for (const r of data?.records || []) {
-      if (r.score?.hrv_rmssd_milli)    push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
-      if (r.score?.resting_heart_rate) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
-      if (r.score?.recovery_score)     push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
+      if (r.score?.hrv_rmssd_milli    != null) push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
+      if (r.score?.resting_heart_rate != null) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
+      if (r.score?.recovery_score     != null) push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Recovery sync error:', e.message) }
 
@@ -100,9 +100,9 @@ export async function syncWhoopData(userId, accessToken) {
   try {
     const data = await whoopFetch(`/sleep?start=${startStr}&end=${endStr}`, accessToken)
     for (const s of data?.records || []) {
-      if (s.score?.total_in_bed_time_milli)
-        push(readings, { time: s.end, metric: 'sleep_hours',     value: s.score.total_in_bed_time_milli / 3_600_000, source: 'whoop' })
-      if (s.score?.respiratory_rate)
+      if (s.score?.total_in_bed_time_milli != null)
+        push(readings, { time: s.end, metric: 'sleep_hours',      value: s.score.total_in_bed_time_milli / 3_600_000, source: 'whoop' })
+      if (s.score?.respiratory_rate        != null)
         push(readings, { time: s.end, metric: 'respiratory_rate', value: s.score.respiratory_rate, source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Sleep sync error:', e.message) }
