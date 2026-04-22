@@ -83,7 +83,7 @@ export async function biometricRoutes(app) {
     const result = await db.query(
       `SELECT DISTINCT ON (metric) metric, value, source, time
        FROM biometric_readings
-       WHERE user_id = $1 AND time > NOW() - INTERVAL '7 days'
+       WHERE user_id = $1 AND time > NOW() - INTERVAL '14 days'
        ORDER BY metric,
          CASE source
            WHEN 'whoop'        THEN 1

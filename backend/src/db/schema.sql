@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS biometric_readings (
 );
 
 CREATE INDEX IF NOT EXISTS biometric_readings_user_time_idx ON biometric_readings (user_id, time DESC);
+-- Unique index so ON CONFLICT DO NOTHING actually deduplicates syncs
+CREATE UNIQUE INDEX IF NOT EXISTS biometric_readings_unique_idx ON biometric_readings (time, user_id, metric, source);
 
 -- Index for fast per-user queries
 CREATE INDEX IF NOT EXISTS idx_biometric_user_metric ON biometric_readings (user_id, metric, time DESC);

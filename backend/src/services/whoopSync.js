@@ -8,6 +8,8 @@ const RANGES = {
   hrv:              { min: 5,   max: 300  },
   rhr:              { min: 30,  max: 120  },
   sleep_hours:      { min: 0.5, max: 16   },
+  sleep_rem_hours:  { min: 0,   max: 8    },
+  sleep_deep_hours: { min: 0,   max: 8    },
   recovery_score:   { min: 0,   max: 100  },
   stress_score:     { min: 0,   max: 100  },
   respiratory_rate: { min: 6,   max: 40   },
@@ -93,25 +95,35 @@ export async function syncWhoopData(userId, accessToken) {
 
   const readings = []
 
-  // Recovery — HRV, resting HR, recovery score
+  // Recovery — HRV, resting HR, recovery score (only SCORED records)
   try {
     const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
     for (const r of data?.records || []) {
+      if (r.score_state !== 'SCORED') {
+        console.log(`[WHOOP] Skipping unscored recovery ${r.id} (${r.score_state})`)
+        continue
+      }
       if (r.score?.hrv_rmssd_milli    != null) push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
-      else console.warn(`[WHOOP] Recovery record missing HRV — score_state: ${r.score_state}, id: ${r.id}`)
       if (r.score?.resting_heart_rate != null) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
       if (r.score?.recovery_score     != null) push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Recovery sync error:', e.message) }
 
-  // Sleep — hours + respiratory rate
+  // Sleep — hours, stages (REM, deep), respiratory rate (skip naps)
   try {
     const data = await whoopFetch(`/sleep?start=${startStr}&end=${endStr}`, accessToken)
     for (const s of data?.records || []) {
+      if (s.nap) continue  // naps would overwrite full night sleep data
+      if (s.score_state !== 'SCORED') continue
+      const ss = s.score?.stage_summary
       if (s.score?.total_in_bed_time_milli != null)
-        push(readings, { time: s.end, metric: 'sleep_hours',      value: s.score.total_in_bed_time_milli / 3_600_000, source: 'whoop' })
-      if (s.score?.respiratory_rate        != null)
-        push(readings, { time: s.end, metric: 'respiratory_rate', value: s.score.respiratory_rate, source: 'whoop' })
+        push(readings, { time: s.end, metric: 'sleep_hours',      value: s.score.total_in_bed_time_milli / 3_600_000,         source: 'whoop' })
+      if (ss?.total_rem_sleep_time_milli != null)
+        push(readings, { time: s.end, metric: 'sleep_rem_hours',  value: ss.total_rem_sleep_time_milli  / 3_600_000,           source: 'whoop' })
+      if (ss?.total_slow_wave_sleep_time_milli != null)
+        push(readings, { time: s.end, metric: 'sleep_deep_hours', value: ss.total_slow_wave_sleep_time_milli / 3_600_000,      source: 'whoop' })
+      if (s.score?.respiratory_rate != null)
+        push(readings, { time: s.end, metric: 'respiratory_rate', value: s.score.respiratory_rate,                            source: 'whoop' })
     }
   } catch (e) { console.error('[WHOOP] Sleep sync error:', e.message) }
 
@@ -148,7 +160,7 @@ export async function syncWhoopData(userId, accessToken) {
     const params = readings.flatMap(r => [r.time, userId, r.metric, r.value, r.source])
     await db.query(
       `INSERT INTO biometric_readings (time, user_id, metric, value, source)
-       VALUES ${values} ON CONFLICT DO NOTHING`,
+       VALUES ${values} ON CONFLICT (time, user_id, metric, source) DO NOTHING`,
       params
     )
 
