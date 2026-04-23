@@ -25,8 +25,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export async function runMigrations() {
   const client = await db.connect()
   try {
+    // Step 1: Remove duplicate biometric readings so the unique index can be
+    // created cleanly. Separate query + .catch() so it's a no-op on the very
+    // first deploy when the table doesn't exist yet.
+    await client.query(`
+      DELETE FROM biometric_readings
+      WHERE ctid NOT IN (
+        SELECT min(ctid)
+        FROM biometric_readings
+        GROUP BY time, user_id, metric, source
+      )
+    `).catch(() => {})
+
+    // Step 2: Apply schema (CREATE TABLE IF NOT EXISTS, indexes, etc.)
     const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8')
     await client.query(schema)
+
     console.log('✅ Migrations complete')
   } finally {
     client.release()
