@@ -144,7 +144,7 @@ export async function biometricRoutes(app) {
   app.get('/connections', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId } = request.user
     const result = await db.query(
-      `SELECT provider, connected_at, last_sync FROM wearable_connections WHERE user_id = $1`,
+      `SELECT provider, connected_at, last_sync, status FROM wearable_connections WHERE user_id = $1`,
       [userId]
     )
     return reply.send(result.rows)
@@ -236,10 +236,11 @@ export async function biometricRoutes(app) {
       : null
 
     await db.query(
-      `INSERT INTO wearable_connections (user_id, provider, access_token, refresh_token, token_expires)
-       VALUES ($1, 'whoop', $2, $3, $4)
+      `INSERT INTO wearable_connections (user_id, provider, access_token, refresh_token, token_expires, status)
+       VALUES ($1, 'whoop', $2, $3, $4, 'active')
        ON CONFLICT (user_id, provider) DO UPDATE
-       SET access_token = $2, refresh_token = $3, token_expires = $4, connected_at = NOW(), last_sync = NOW()`,
+       SET access_token = $2, refresh_token = $3, token_expires = $4,
+           connected_at = NOW(), last_sync = NOW(), status = 'active'`,
       [userId, tokens.access_token, tokens.refresh_token, expires]
     )
 

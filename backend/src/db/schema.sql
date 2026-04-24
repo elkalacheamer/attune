@@ -67,8 +67,12 @@ CREATE TABLE IF NOT EXISTS wearable_connections (
   token_expires  TIMESTAMPTZ,
   connected_at   TIMESTAMPTZ DEFAULT NOW(),
   last_sync      TIMESTAMPTZ,
+  status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'needs_reauth')),
   UNIQUE(user_id, provider)
 );
+
+-- Add status column to existing deployments
+ALTER TABLE wearable_connections ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'needs_reauth'));
 
 -- ── Biometric readings ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS biometric_readings (
