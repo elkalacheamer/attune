@@ -78,14 +78,14 @@ export async function biometricRoutes(app) {
   app.get('/summary', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId } = request.user
 
-    // Source priority: whoop > oura > garmin > apple_health > manual
-    // DISTINCT ON picks the first row per metric after ordering, so lower
-    // priority number = preferred source
+    // Most recent reading wins; source priority is a tiebreaker within the same day.
+    // This ensures a fresh Apple Health reading beats a stale WHOOP reading.
     const result = await db.query(
       `SELECT DISTINCT ON (metric) metric, value, source, time
        FROM biometric_readings
        WHERE user_id = $1 AND time > NOW() - INTERVAL '14 days'
        ORDER BY metric,
+         time DESC,
          CASE source
            WHEN 'whoop'        THEN 1
            WHEN 'oura'         THEN 2
@@ -93,8 +93,7 @@ export async function biometricRoutes(app) {
            WHEN 'apple_health' THEN 4
            WHEN 'manual'       THEN 5
            ELSE 6
-         END ASC,
-         time DESC`,
+         END ASC`,
       [userId]
     )
 
