@@ -66,7 +66,8 @@ export async function biometricRoutes(app) {
 
     await db.query(
       `INSERT INTO biometric_readings (time, user_id, metric, value, source)
-       VALUES ${values} ON CONFLICT DO NOTHING`,
+       VALUES ${values}
+       ON CONFLICT (time, user_id, metric, source) DO UPDATE SET value = EXCLUDED.value`,
       params
     )
 

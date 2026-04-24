@@ -160,7 +160,8 @@ export async function syncWhoopData(userId, accessToken) {
     const params = readings.flatMap(r => [r.time, userId, r.metric, r.value, r.source])
     await db.query(
       `INSERT INTO biometric_readings (time, user_id, metric, value, source)
-       VALUES ${values} ON CONFLICT (time, user_id, metric, source) DO NOTHING`,
+       VALUES ${values}
+       ON CONFLICT (time, user_id, metric, source) DO UPDATE SET value = EXCLUDED.value`,
       params
     )
 

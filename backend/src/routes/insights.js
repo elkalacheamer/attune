@@ -101,13 +101,17 @@ async function generateInsights(userId, coupleId) {
   if (!user) return
 
   // ── Current user context ─────────────────────────────────
+  // Exclude calories & steps — not consistently tracked and not relationship-relevant
+  const INSIGHT_EXCLUDE = new Set(['calories', 'steps'])
   const bioText = bioResult.rows.length > 0
-    ? bioResult.rows.map(b => {
-        const val = parseFloat(b.value).toFixed(1)
-        const dev = b.avg_7d ? ((b.value - b.avg_7d) / b.avg_7d * 100).toFixed(0) : null
-        const devStr = dev ? ` (${dev > 0 ? '+' : ''}${dev}% vs 7d avg)` : ''
-        return `${b.metric}: ${val}${devStr} [${b.source}]`
-      }).join('\n')
+    ? bioResult.rows
+        .filter(b => !INSIGHT_EXCLUDE.has(b.metric))
+        .map(b => {
+          const val = parseFloat(b.value).toFixed(1)
+          const dev = b.avg_7d ? ((b.value - b.avg_7d) / b.avg_7d * 100).toFixed(0) : null
+          const devStr = dev ? ` (${dev > 0 ? '+' : ''}${dev}% vs 7d avg)` : ''
+          return `${b.metric}: ${val}${devStr} [${b.source}]`
+        }).join('\n') || 'No relevant biometric data'
     : 'No biometric data yet'
 
   const cycleDay  = cycleResult.rows[0]
@@ -123,7 +127,9 @@ async function generateInsights(userId, coupleId) {
   const partnerMood     = partnerMoodResult.rows[0]
 
   const partnerBioText = partner && partnerBioResult.rows.length > 0
-    ? partnerBioResult.rows.map(b => `${b.metric}: ${parseFloat(b.value).toFixed(1)} [${b.source}]`).join('\n')
+    ? partnerBioResult.rows
+        .filter(b => !INSIGHT_EXCLUDE.has(b.metric))
+        .map(b => `${b.metric}: ${parseFloat(b.value).toFixed(1)} [${b.source}]`).join('\n') || 'No relevant biometric data'
     : partner ? 'No biometric data' : null
 
   const partnerCycleText = partner?.sex === 'female' && partnerCycleDay
