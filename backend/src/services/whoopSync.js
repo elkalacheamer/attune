@@ -59,6 +59,7 @@ export async function refreshWhoopTokenIfNeeded(userId, { access_token, refresh_
         refresh_token,
         client_id:     clientId,
         client_secret: clientSecret,
+        redirect_uri:  'attune://whoop-callback',   // Ory Hydra requires this on refresh
       })
     })
 
@@ -115,7 +116,7 @@ export async function syncWhoopData(userId, accessToken) {
 
   // Sleep — hours, stages (REM, deep), respiratory rate (skip naps)
   try {
-    const data = await whoopFetch(`/activity/sleep?start=${startStr}&end=${endStr}`, accessToken)
+    const data = await whoopFetch(`/sleep?start=${startStr}&end=${endStr}`, accessToken)
     for (const s of data?.records || []) {
       if (s.nap) continue  // naps would overwrite full night sleep data
       if (s.score_state !== 'SCORED') continue
