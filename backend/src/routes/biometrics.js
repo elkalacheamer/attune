@@ -74,6 +74,25 @@ export async function biometricRoutes(app) {
     return reply.code(201).send({ inserted: validated.length })
   })
 
+  // GET /api/biometrics/debug — last 20 raw readings per metric for troubleshooting
+  app.get('/debug', { onRequest: [app.authenticate] }, async (request, reply) => {
+    const { userId } = request.user
+    const result = await db.query(
+      `SELECT metric, source, value, time
+       FROM biometric_readings
+       WHERE user_id = $1
+       ORDER BY time DESC
+       LIMIT 100`,
+      [userId]
+    )
+    const grouped = {}
+    for (const r of result.rows) {
+      if (!grouped[r.metric]) grouped[r.metric] = []
+      if (grouped[r.metric].length < 5) grouped[r.metric].push({ source: r.source, value: r.value, time: r.time })
+    }
+    return reply.send(grouped)
+  })
+
   // GET /api/biometrics/summary
   app.get('/summary', { onRequest: [app.authenticate] }, async (request, reply) => {
     const { userId } = request.user

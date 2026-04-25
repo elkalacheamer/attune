@@ -98,11 +98,15 @@ export async function syncWhoopData(userId, accessToken) {
   // Recovery — HRV, resting HR, recovery score (only SCORED records)
   try {
     const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
+    const total  = data?.records?.length || 0
+    const scored = data?.records?.filter(r => r.score_state === 'SCORED').length || 0
+    console.log(`[WHOOP] Recovery: ${total} records, ${scored} scored`)
     for (const r of data?.records || []) {
       if (r.score_state !== 'SCORED') {
         console.log(`[WHOOP] Skipping unscored recovery ${r.id} (${r.score_state})`)
         continue
       }
+      console.log(`[WHOOP] Recovery ${r.id}: hrv=${r.score?.hrv_rmssd_milli} rhr=${r.score?.resting_heart_rate} rec=${r.score?.recovery_score}`)
       if (r.score?.hrv_rmssd_milli    != null) push(readings, { time: r.created_at, metric: 'hrv',            value: r.score.hrv_rmssd_milli,    source: 'whoop' })
       if (r.score?.resting_heart_rate != null) push(readings, { time: r.created_at, metric: 'rhr',            value: r.score.resting_heart_rate, source: 'whoop' })
       if (r.score?.recovery_score     != null) push(readings, { time: r.created_at, metric: 'recovery_score', value: r.score.recovery_score,     source: 'whoop' })
