@@ -46,12 +46,17 @@ export async function biometricRoutes(app) {
       if (!result.success) {
         return reply.code(400).send({ error: 'Invalid reading', details: result.error.flatten() })
       }
+      const data = result.data
+      // Apple HealthKit returns HRV SDNN in seconds (e.g. 0.034); convert to ms
+      if (data.metric === 'hrv' && data.value < 2.0) {
+        data.value = Math.round(data.value * 1000 * 10) / 10  // e.g. 0.034 → 34.0 ms
+      }
       // Silently drop physiologically impossible values
-      if (!isInRange(result.data.metric, result.data.value)) {
-        console.warn(`[Biometrics] Out-of-range reading dropped: ${result.data.metric}=${result.data.value} from ${result.data.source}`)
+      if (!isInRange(data.metric, data.value)) {
+        console.warn(`[Biometrics] Out-of-range reading dropped: ${data.metric}=${data.value} from ${data.source}`)
         continue
       }
-      validated.push(result.data)
+      validated.push(data)
     }
 
     if (validated.length === 0) return reply.code(201).send({ inserted: 0 })
