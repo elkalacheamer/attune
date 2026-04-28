@@ -268,6 +268,17 @@ export async function biometricRoutes(app) {
       [userId, tokens.access_token, tokens.refresh_token, expires]
     )
 
+    // Log which WHOOP account was just connected
+    try {
+      const profileRes = await fetch('https://api.prod.whoop.com/developer/v1/user/profile/basic', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` }
+      })
+      const profile = await profileRes.json()
+      console.log(`[WHOOP] Connected account: ${profile.email} (WHOOP user_id: ${profile.user_id})`)
+    } catch (e) {
+      console.log('[WHOOP] Could not fetch profile after connect:', e.message)
+    }
+
     // Sync initial data
     const count = await syncWhoopData(userId, tokens.access_token)
 

@@ -116,7 +116,7 @@ export async function syncWhoopData(userId, accessToken) {
 
   // Sleep — hours, stages (REM, deep), respiratory rate (skip naps)
   try {
-    const data = await whoopFetch(`/sleep?start=${startStr}&end=${endStr}`, accessToken)
+    const data = await whoopFetch(`/activity/sleep?start=${startStr}&end=${endStr}`, accessToken)
     for (const s of data?.records || []) {
       if (s.nap) continue  // naps would overwrite full night sleep data
       if (s.score_state !== 'SCORED') continue
