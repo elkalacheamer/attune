@@ -102,7 +102,15 @@ export async function syncWhoopData(userId, accessToken) {
 
   // Recovery — HRV, resting HR, recovery score (only SCORED records)
   try {
-    const data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
+    // Try with date params first; fall back to no params to isolate if dates cause 404
+    let data = await whoopFetch(`/recovery?start=${startStr}&end=${endStr}`, accessToken)
+      .catch(async (e) => {
+        if (e.message.includes('404')) {
+          console.warn('[WHOOP] Recovery with dates → 404, retrying without date filter...')
+          return whoopFetch(`/recovery`, accessToken)
+        }
+        throw e
+      })
     const total  = data?.records?.length || 0
     const scored = data?.records?.filter(r => r.score_state === 'SCORED').length || 0
     console.log(`[WHOOP] Recovery: ${total} records, ${scored} scored`)
