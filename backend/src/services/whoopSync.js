@@ -36,7 +36,11 @@ async function whoopFetch(path, accessToken) {
     err.code = 'WHOOP_AUTH_EXPIRED'
     throw err
   }
-  if (!res.ok) throw new Error(`WHOOP API error ${res.status} on ${path}`)
+  if (!res.ok) {
+    let body = ''
+    try { body = await res.text() } catch {}
+    throw new Error(`WHOOP API error ${res.status} on ${path} — ${body}`)
+  }
   return res.json()
 }
 
