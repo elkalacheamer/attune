@@ -277,9 +277,8 @@ export async function insightRoutes(app) {
       `UPDATE insights SET feedback = $1 WHERE id = $2 AND recipient_id = $3`,
       [feedback, id, userId]
     )
-    // Bust cache so UI reflects updated feedback
-    const today = new Date().toISOString().slice(0, 10)
-    await cacheSet(`insights:${userId}:${today}`, 1, '[]')
+    // No cache bust — the UI applies feedback optimistically on the client side
+    // so we don't need to invalidate the cache (which would briefly show an empty state)
 
     return reply.send({ success: true })
   })
